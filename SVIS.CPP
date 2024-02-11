@@ -8,6 +8,7 @@
 #include "namedefs.h"
 #include "textstuff.h"
 #include "resource.h"
+#include <prsht.h>
 #include <vector>
 #include <iterator>
 #include <algorithm>
@@ -50,6 +51,7 @@ std::ofstream debugLogFile;
 int config_x=50, config_y=50;	// screen X position and Y position, repsectively
 int config_w=550, config_h=153;	// screen X position and Y position, repsectively
 bool g_bEmbedIntoMainWindow = false;  // Global variable to store checkbox state
+bool g_bSDL2text = true;
 int ZOOM=7;
 void config_read(struct winampVisModule *this_mod);		// reads the configuration
 void config_write(struct winampVisModule *this_mod);	// writes the configuration
@@ -68,6 +70,7 @@ int render4(struct winampVisModule *this_mod);  // rendering for module 4
 void quit(struct winampVisModule *this_mod);   // deinitialization for module
 int random_presets_flag = 0;
 int is_paused = 0;
+int vinit = 0;
 
 typedef struct {
     Uint8 r, g, b, a;
@@ -400,10 +403,7 @@ winampVisModule *getModule(int which)
 
 winampVisModule *g_mod = NULL;
 
-// Declaration of DialogProc function
-INT_PTR CALLBACK DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
-
-// Function to show the configuration dialog
+/* // Function to show the configuration dialog
 static void ShowDialog(HINSTANCE hInstance) {
     RECT winampRect;
     GetWindowRect(hwndWinamp, &winampRect);
@@ -417,96 +417,123 @@ static void ShowDialog(HINSTANCE hInstance) {
 
     // Show the modeless dialog
     ShowWindow(hDialog, SW_SHOWNORMAL);
+} */
+
+// Declaration of DialogProc function
+INT_PTR CALLBACK DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);
+
+void EnableControls(HWND hwndDlg) {
+    HWND hSlider = GetDlgItem(hwndDlg, IDC_ZOOM_TRACKBAR);
+    // Enable/disable controls based on embedding and text checkbox state
+    EnableWindow(hSlider, !g_bEmbedIntoMainWindow);
+    EnableWindow(GetDlgItem(hwndDlg, IDC_TEXT_CHECKBOX), !g_bEmbedIntoMainWindow);
+    EnableWindow(GetDlgItem(hwndDlg, IDC_ZOOM_LABEL), !g_bEmbedIntoMainWindow);
 }
 
-
+// Dialog procedure
 INT_PTR CALLBACK DialogProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    static HWND hTrackBar;
+
     switch (uMsg) {
-    case WM_INITDIALOG:
-    {
-        // Initialize the checkbox state based on the global variable
-        CheckDlgButton(hwndDlg, IDC_EMBED_CHECKBOX, g_bEmbedIntoMainWindow ? BST_CHECKED : BST_UNCHECKED);
+        case WM_INITDIALOG:
+            // Initialize controls and variables
+            hTrackBar = GetDlgItem(hwndDlg, IDC_ZOOM_TRACKBAR);
+            SendMessage(hTrackBar, TBM_SETRANGE, FALSE, MAKELPARAM(1, 8));
+            SendMessage(hTrackBar, TBM_SETPOS, TRUE, ZOOM);
 
-        HWND hSlider = GetDlgItem(hwndDlg, IDC_ZOOM_TRACKBAR);
-        SendMessage(hSlider, TBM_SETRANGE, FALSE, MAKELPARAM(1, 8));
-        SendMessage(hSlider, TBM_SETPOS, TRUE, ZOOM);
+            // Initialize checkbox states
+            CheckDlgButton(hwndDlg, IDC_EMBED_CHECKBOX, g_bEmbedIntoMainWindow ? BST_CHECKED : BST_UNCHECKED);
+            CheckDlgButton(hwndDlg, IDC_TEXT_CHECKBOX, g_bSDL2text ? BST_CHECKED : BST_UNCHECKED);
 
-        wchar_t labelText[128];
-        swprintf(labelText, L"Zoom Factor: %d", ZOOM);
-        SetDlgItemTextW(hwndDlg, IDC_ZOOM_LABEL, labelText);
-
-        // Disable the trackbar if embedding is active
-        EnableWindow(hSlider, !g_bEmbedIntoMainWindow);
-
-        return TRUE;
-    }
-
-    case WM_COMMAND:
-        if (LOWORD(wParam) == IDC_OK_BUTTON && HIWORD(wParam) == BN_CLICKED) {
-            // "OK" button clicked, close the modeless dialog
-            EndDialog(hwndDlg, TRUE);
-            return TRUE; // Message handled
-        }
-        else if (LOWORD(wParam) == IDC_EMBED_CHECKBOX && HIWORD(wParam) == BN_CLICKED) {
-            // Checkbox state changed, update the global variable
-            g_bEmbedIntoMainWindow = IsDlgButtonChecked(hwndDlg, IDC_EMBED_CHECKBOX) == BST_CHECKED;
-            // Enable or disable the trackbar based on the checkbox state
-            HWND hSlider = GetDlgItem(hwndDlg, IDC_ZOOM_TRACKBAR);
-            EnableWindow(hSlider, !g_bEmbedIntoMainWindow);
-            return TRUE; // Message handled
-        }
-        break;
-
-    case WM_CLOSE:
-        // Handle other close events here if needed
-        EndDialog(hwndDlg, TRUE);
-        return TRUE; // Message handled
-
-    case WM_HSCROLL:
-    {
-        // Handle slider movement
-        HWND hTrackBar = GetDlgItem(hwndDlg, IDC_ZOOM_TRACKBAR);
-        if ((HWND)lParam == hTrackBar && !g_bEmbedIntoMainWindow) {
-            // Slider position changed
-            int pos = SendMessage(hTrackBar, TBM_GETPOS, 0, 0); // Get the new position
-            ZOOM = pos; // Update ZOOM with the new position
-
-            // Update label text
+            // Initialize zoom label
             wchar_t labelText[128];
-            swprintf(labelText, L"Zoom Factor: %d", ZOOM); // Ensure that ZOOM is correctly retrieved
+            swprintf(labelText, L"Zoom Factor: %d", ZOOM);
             SetDlgItemTextW(hwndDlg, IDC_ZOOM_LABEL, labelText);
 
+            // Handle initialization state
+            if (vinit == 0) {
+                // Disable controls and display error message
+                EnableWindow(hTrackBar, FALSE);
+                EnableWindow(GetDlgItem(hwndDlg, IDC_EMBED_CHECKBOX), FALSE);
+                EnableWindow(GetDlgItem(hwndDlg, IDC_TEXT_CHECKBOX), FALSE);
+                EnableWindow(GetDlgItem(hwndDlg, IDC_ZOOM_LABEL), FALSE);
+                MessageBoxW(hwndDlg, L"Plugin not running, configuration disabled...", L"vis_sdl2", MB_OK | MB_ICONERROR);
+                EndDialog(hwndDlg, TRUE);
+            }
             return TRUE;
-        }
-        break;
+
+        case WM_COMMAND:
+            switch (LOWORD(wParam)) {
+                case IDC_OK_BUTTON:
+                    if (HIWORD(wParam) == BN_CLICKED) {
+                        // "OK" button clicked, close the dialog
+                        EndDialog(hwndDlg, TRUE);
+                        return TRUE;
+                    }
+                    break;
+
+                case IDC_EMBED_CHECKBOX:
+                    // Checkbox state changed, update global variable and control state
+                    g_bEmbedIntoMainWindow = IsDlgButtonChecked(hwndDlg, IDC_EMBED_CHECKBOX) == BST_CHECKED;
+                    EnableWindow(hTrackBar, !g_bEmbedIntoMainWindow);
+                    return TRUE;
+
+                case IDC_TEXT_CHECKBOX:
+                    // Checkbox state changed, update global variable
+                    g_bSDL2text = IsDlgButtonChecked(hwndDlg, IDC_TEXT_CHECKBOX) == BST_CHECKED;
+                    return TRUE;
+            }
+            break;
+
+        case WM_HSCROLL:
+            if ((HWND)lParam == hTrackBar && !g_bEmbedIntoMainWindow) {
+                // Slider position changed, update zoom
+                int pos = SendMessage(hTrackBar, TBM_GETPOS, 0, 0);
+                ZOOM = pos;
+
+                // Update zoom label
+                swprintf(labelText, L"Zoom Factor: %d", ZOOM);
+                SetDlgItemTextW(hwndDlg, IDC_ZOOM_LABEL, labelText);
+                return TRUE;
+            }
+            break;
+
+        case WM_CLOSE:
+            // Handle close events
+            EndDialog(hwndDlg, TRUE);
+            return TRUE;
+
+        // Handle other messages if needed
+
+        default:
+            break;
     }
 
-    default:
-        break;
-    }
-
-    return FALSE; // Message not handled
+    return FALSE;
 }
 
-// configuration. Passed this_mod, as a "this" parameter. Allows you to make one configuration
-// function that shares code for all your modules (you don't HAVE to use it though, you can make
-// config1(), config2(), etc...)
-void config(struct winampVisModule *this_mod)
-{
-	// MessageBoxW(this_mod->hwndParent,L"This is what happens when you leave me alone with ChatGPT.\n"
-	// 								L"It knows C++ better than Rust, figures.\n"
-	// 								L"Based on Justin Frankel's 1997-1998 vis_test example plugin\n"
-	// //L"This module is Copyright (c) 1997-1998, Justin Frankel/Nullsoft\n"
-	// 								L"-- This is just a demonstration module, it really isn't\n"
-	// 								L"   supposed to be enjoyable (that is something he wants you to think) --",L"Configuration",MB_OK);
-    // Use DialogProc here
-    //config_read(this_mod);
-    //ShowDialog(this_mod->hDllInstance); // Pass the HINSTANCE from the plugin
+// Configuration function
+void config(struct winampVisModule *this_mod) {
+    // Initialize property sheet header and page
+    PROPSHEETPAGE psp = {0};
+    PROPSHEETHEADER psh = {0};
 
-    DialogBox(this_mod->hDllInstance,
-        MAKEINTRESOURCE(IDD_CONFIGBOX),
-        this_mod->hwndParent,
-        (DLGPROC)DialogProc);
+    psp.dwSize = sizeof(PROPSHEETPAGE);
+    psp.dwFlags = PSP_DEFAULT;
+    psp.hInstance = this_mod->hDllInstance;
+    psp.pszTemplate = MAKEINTRESOURCE(IDD_CONFIGBOX);
+    psp.pfnDlgProc = (DLGPROC)DialogProc;
+
+    psh.dwSize = sizeof(PROPSHEETHEADER);
+    psh.dwFlags = PSH_PROPTITLE | PSH_PROPSHEETPAGE | PSH_NOCONTEXTHELP;
+    psh.hwndParent = hwndWinamp;
+    psh.hInstance = this_mod->hDllInstance;
+    psh.pszCaption = "vis_sdl2";
+    psh.nPages = 1;
+    psh.ppsp = &psp;
+
+    // Display property sheet
+    PropertySheet(&psh);
 }
 
 embedWindowState myWindowState;
@@ -522,6 +549,7 @@ int init(struct winampVisModule *this_mod)
 	int styles;
 	HWND parent = NULL;
 	HWND (*e)(embedWindowState *v);
+    vinit = 1;
 
 	debugLogFile.open("debug_log.txt");
 
@@ -681,9 +709,6 @@ int render1(struct winampVisModule *this_mod)
 	Color* osc_colors = osccolors(colors);
 	clearRenderer(renderer, {0, 0, 0, 255});
 
-    const char* infoText = GetInfoText(winampWindow);
-    const std::string combinedText = CreateSongTickerText(winampWindow);
-
 	// int targetWidth = 75; // We don't need to scale X
 
 	// Get the SA data function pointer
@@ -753,8 +778,12 @@ int render1(struct winampVisModule *this_mod)
     	}
     }
 
-    renderText(renderer, infoText, 30 * ZOOM, 16 * ZOOM, font, {255,255,255,255});
-    renderMarqueeText(renderer, combinedText.c_str(), 0, 19 * ZOOM, font, {255, 255, 255, 255}, 75 * ZOOM);
+    if (g_bSDL2text){
+        const char* infoText = GetInfoText(winampWindow);
+        const std::string combinedText = CreateSongTickerText(winampWindow);
+        renderText(renderer, infoText, 30 * ZOOM, 16 * ZOOM, font, {255,255,255,255});
+        renderMarqueeText(renderer, combinedText.c_str(), 0, 19 * ZOOM, font, {255, 255, 255, 255}, 75 * ZOOM);        
+    }
 
     presentRenderer();
 	return 0;
@@ -828,10 +857,6 @@ int render2(struct winampVisModule *this_mod)
 
     HWND winampWindow = this_mod->hwndParent;
 
-    const char* infoText = GetInfoText(winampWindow);
-
-    const std::string combinedText = CreateSongTickerText(winampWindow);
-
     // Get the SA data function pointer
 /* 	char *(*export_sa_get)(char data[75*2 + 8]);
 	*(void**)&export_sa_get = (void*)SendMessage(this_mod->hwndParent, WM_WA_IPC, 0, IPC_GETSADATAFUNC); */
@@ -894,8 +919,12 @@ int render2(struct winampVisModule *this_mod)
 	
 	//debugLogFile << "intValue: " << bars[74].peak << std::endl;
 	renderBars(renderer, colors[0]);
-    renderText(renderer, infoText, 30 * ZOOM, 16 * ZOOM, font, {255,255,255,255});
-    renderMarqueeText(renderer, combinedText.c_str(), 0, 19 * ZOOM, font, {255,255,255,255}, 75 * ZOOM);
+    if (g_bSDL2text){
+        const char* infoText = GetInfoText(winampWindow);
+        const std::string combinedText = CreateSongTickerText(winampWindow);
+        renderText(renderer, infoText, 30 * ZOOM, 16 * ZOOM, font, {255,255,255,255});
+        renderMarqueeText(renderer, combinedText.c_str(), 0, 19 * ZOOM, font, {255, 255, 255, 255}, 75 * ZOOM);        
+    }
     presentRenderer();
 	return 0;
 }
@@ -910,10 +939,6 @@ int render3(struct winampVisModule *this_mod)
     clearRenderer(renderer, {0, 0, 0, 255});
 
     HWND winampWindow = this_mod->hwndParent;
-
-    const char* infoText = GetInfoText(winampWindow);
-
-    const std::string combinedText = CreateSongTickerText(winampWindow);
 
     // Get the VU data function pointer
     int (*export_vu_get)(int channel);
@@ -985,8 +1010,12 @@ int render3(struct winampVisModule *this_mod)
         }
     }
 
-    renderText(renderer, infoText, 30 * ZOOM, 16 * ZOOM, font, {255,255,255,255});
-    renderMarqueeText(renderer, combinedText.c_str(), 0, 19 * ZOOM, font, {255,255,255,255}, 75 * ZOOM);
+    if (g_bSDL2text){
+        const char* infoText = GetInfoText(winampWindow);
+        const std::string combinedText = CreateSongTickerText(winampWindow);
+        renderText(renderer, infoText, 30 * ZOOM, 16 * ZOOM, font, {255,255,255,255});
+        renderMarqueeText(renderer, combinedText.c_str(), 0, 19 * ZOOM, font, {255, 255, 255, 255}, 75 * ZOOM);        
+    }
     //MessageBox(winampWindow, combinedText.c_str(), "blah", MB_OK);
 
     presentRenderer();
@@ -1229,27 +1258,29 @@ void config_read(struct winampVisModule *this_mod)
 #endif //_WIN64
 
 #ifdef _WIN64
-    config_x = GetPrivateProfileIntW(this_mod->description, L"Screen_x", config_x, ini_file);
-    config_y = GetPrivateProfileIntW(this_mod->description, L"Screen_y", config_y, ini_file);
-    config_w = GetPrivateProfileIntW(this_mod->description, L"Screen_w", config_w, ini_file);
-    config_h = GetPrivateProfileIntW(this_mod->description, L"Screen_h", config_h, ini_file);
+    config_x = GetPrivateProfileIntW(L"vis_sdl2 settings", L"Screen_x", config_x, ini_file);
+    config_y = GetPrivateProfileIntW(L"vis_sdl2 settings", L"Screen_y", config_y, ini_file);
+    config_w = GetPrivateProfileIntW(L"vis_sdl2 settings", L"Screen_w", config_w, ini_file);
+    config_h = GetPrivateProfileIntW(L"vis_sdl2 settings", L"Screen_h", config_h, ini_file);
     g_bEmbedIntoMainWindow = GetPrivateProfileIntW(L"vis_sdl2 settings", L"embed2main", g_bEmbedIntoMainWindow, ini_file);
     if (g_bEmbedIntoMainWindow && FindWindow("STATIC", NULL)) {
         // SORRY NOTHING
     } else {
         ZOOM = GetPrivateProfileIntW(L"vis_sdl2 settings", L"Zoom", ZOOM, ini_file);
     }
+    g_bSDL2text = GetPrivateProfileIntW(L"vis_sdl2 settings", L"SDL2text", g_bSDL2text, ini_file);
 #else
-    config_x = GetPrivateProfileInt(this_mod->description, "Screen_x", config_x, ini_file);
-    config_y = GetPrivateProfileInt(this_mod->description, "Screen_y", config_y, ini_file);
-    config_w = GetPrivateProfileInt(this_mod->description, "Screen_w", config_w, ini_file);
-    config_h = GetPrivateProfileInt(this_mod->description, "Screen_h", config_h, ini_file);
+    config_x = GetPrivateProfileInt("vis_sdl2 settings", "Screen_x", config_x, ini_file);
+    config_y = GetPrivateProfileInt("vis_sdl2 settings", "Screen_y", config_y, ini_file);
+    config_w = GetPrivateProfileInt("vis_sdl2 settings", "Screen_w", config_w, ini_file);
+    config_h = GetPrivateProfileInt("vis_sdl2 settings", "Screen_h", config_h, ini_file);
     g_bEmbedIntoMainWindow = GetPrivateProfileInt("vis_sdl2 settings", "embed2main", g_bEmbedIntoMainWindow, ini_file);
     if (g_bEmbedIntoMainWindow && FindWindow("STATIC", NULL)) {
         // SORRY NOTHING
     } else {
         ZOOM = GetPrivateProfileInt("vis_sdl2 settings", "Zoom", ZOOM, ini_file);
     }
+    g_bSDL2text = GetPrivateProfileInt("vis_sdl2 settings", "SDL2text", g_bSDL2text, ini_file);
 #endif //_WIN64
 }
 
@@ -1268,13 +1299,13 @@ void config_write(struct winampVisModule *this_mod)
 
 #ifdef _WIN64
     wsprintfW(string, L"%d", config_x);
-    WritePrivateProfileStringW(this_mod->description, L"Screen_x", string, ini_file);
+    WritePrivateProfileStringW(L"vis_sdl2 settings", L"Screen_x", string, ini_file);
     wsprintfW(string, L"%d", config_y);
-    WritePrivateProfileStringW(this_mod->description, L"Screen_y", string, ini_file);
+    WritePrivateProfileStringW(L"vis_sdl2 settings", L"Screen_y", string, ini_file);
     wsprintfW(string, L"%d", config_w);
-    WritePrivateProfileStringW(this_mod->description, L"Screen_w", string, ini_file);
+    WritePrivateProfileStringW(L"vis_sdl2 settings", L"Screen_w", string, ini_file);
     wsprintfW(string, L"%d", config_h);
-    WritePrivateProfileStringW(this_mod->description, L"Screen_h", string, ini_file);
+    WritePrivateProfileStringW(L"vis_sdl2 settings", L"Screen_h", string, ini_file);
     wsprintfW(string, L"%d", g_bEmbedIntoMainWindow);
     WritePrivateProfileStringW(L"vis_sdl2 settings", L"embed2main", string, ini_file);
     if (g_bEmbedIntoMainWindow){
@@ -1283,15 +1314,17 @@ void config_write(struct winampVisModule *this_mod)
         wsprintfW(string, L"%d", ZOOM);
         WritePrivateProfileStringW(L"vis_sdl2 settings", L"Zoom", string, ini_file);
     }
+    wsprintfW(string, L"%d", g_bSDL2text);
+    WritePrivateProfileStringW(L"vis_sdl2 settings", L"SDL2text", string, ini_file);
 #else
     wsprintf(string, "%d", config_x);
-    WritePrivateProfileString(this_mod->description, "Screen_x", string, ini_file);
+    WritePrivateProfileString("vis_sdl2 settings", "Screen_x", string, ini_file);
     wsprintf(string, "%d", config_y);
-    WritePrivateProfileString(this_mod->description, "Screen_y", string, ini_file);
+    WritePrivateProfileString("vis_sdl2 settings", "Screen_y", string, ini_file);
     wsprintf(string, "%d", config_w);
-    WritePrivateProfileString(this_mod->description, "Screen_w", string, ini_file);
+    WritePrivateProfileString("vis_sdl2 settings", "Screen_w", string, ini_file);
     wsprintf(string, "%d", config_h);
-    WritePrivateProfileString(this_mod->description, "Screen_h", string, ini_file);
+    WritePrivateProfileString("vis_sdl2 settings", "Screen_h", string, ini_file);
     wsprintf(string, "%d", g_bEmbedIntoMainWindow);
     WritePrivateProfileString("vis_sdl2 settings", "embed2main", string, ini_file);
     if (g_bEmbedIntoMainWindow){
@@ -1300,5 +1333,7 @@ void config_write(struct winampVisModule *this_mod)
         wsprintf(string, "%d", ZOOM);
         WritePrivateProfileString("vis_sdl2 settings", "Zoom", string, ini_file);
     }
+    wsprintf(string, "%d", g_bSDL2text);
+    WritePrivateProfileString("vis_sdl2 settings", "SDL2text", string, ini_file);
 #endif //_WIN64
 }

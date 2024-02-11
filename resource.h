@@ -9,3 +9,4 @@
 #define IDC_INFO_TEXT                   1003
 #define IDC_ZOOM_TRACKBAR               1004
 #define IDC_ZOOM_LABEL                  1005
+#define IDC_TEXT_CHECKBOX              1006

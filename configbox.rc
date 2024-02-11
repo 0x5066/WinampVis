@@ -4,13 +4,13 @@
    Name: 101.  */
 LANGUAGE 9, 1
 
-101 DIALOGEX MOVEABLE PURE DISCARDABLE 0, 0, 183, 102
-STYLE 0x80c800c0
+101 DIALOGEX MOVEABLE PURE DISCARDABLE 0, 0, 183, 110
+STYLE 0x90c800c0
 CAPTION "About WinampVis & Settings"
 FONT 8, "TAHOMA", 0, 0, 0
 BEGIN
-  DEFPUSHBUTTON "&OK", 1001, 131, 86, 50, 14, 0x50010001
   AUTOCHECKBOX "Embed into Main Window (needs vis restart)", 1002, 12, 65, 153, 14, 0x50010003
+  AUTOCHECKBOX "Enable Text in Visualizer", 1006, 12, 80, 96, 14, 0x50010003
   LTEXT "Based on the vis_test example by Justin Frankel.\nHeavily modified by Eris Lund (0x5066).\nPowered with SDL2.", 1003, 5, 4, 162, 25, 0x50020000
   CONTROL "", 1004, "MSCTLS_TRACKBAR32", 0x50030001, 6, 45, 91, 18
   LTEXT "Zoom Factor", 1005, 14, 32, 73, 9, 0x50020000
