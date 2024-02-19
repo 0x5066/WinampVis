@@ -1310,6 +1310,8 @@ typedef struct _prefsDlgRecW {
 ** pass 2 for font charset
 ** pass 3 for font size
 ** pass 4 for playlist selection text colour (v5.66+)
+** pass 10 will now return a pointer to an unsigned char[72] array of 24 r,g,b values 
+** (i.e. the first 3 bytes are one rgb value, next 3 are the next so on).
 */
 
 #ifdef __cplusplus

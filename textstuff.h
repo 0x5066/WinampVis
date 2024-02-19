@@ -13,16 +13,16 @@
 
 #define WIN32_LEAN_AND_MEAN
 
+SDL_Surface* text = NULL;
+SDL_Texture* text_texture = NULL;
+SDL_Surface* textSurface = NULL;
+SDL_Texture* textTexture = NULL;
+
 void renderText(SDL_Renderer* renderer, const char* text_t, int x, int y, TTF_Font* font, SDL_Color color) {
-
-    SDL_Surface* text;
-
     text = TTF_RenderText_Blended(font, text_t, color);
     if (!text) {
         std::cout << "Failed to render text: " << TTF_GetError() << std::endl;
     }
-
-    SDL_Texture* text_texture;
 
     text_texture = SDL_CreateTextureFromSurface(renderer, text);
 
@@ -119,10 +119,10 @@ void renderMarqueeText(SDL_Renderer* renderer, const char* text, int x, int y, T
     }
 
     // Create a surface from the repeated text
-    SDL_Surface* textSurface = TTF_RenderText_Blended(font, repeatedText.c_str(), color);
+    textSurface = TTF_RenderText_Blended(font, repeatedText.c_str(), color);
 
     // Create a texture from the surface
-    SDL_Texture* textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
+    textTexture = SDL_CreateTextureFromSurface(renderer, textSurface);
 
     // Set the clip rectangle
     SDL_Rect clipRect = { x, y, screenWidth, textHeight };
